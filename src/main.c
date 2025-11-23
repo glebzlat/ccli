@@ -361,6 +361,8 @@ int collect_positionals(OptionList* pos, OptionList* opts) {
 
 Option* find_option_lname(OptionList* opts, char const* str) {
   OPTLIST_FOREACH(opts, opt) {
+    if (opt->type == OPTION_POSITIONAL)
+      return NULL;
     if (!opt->lname)
       continue;
     if (strcmp(opt->lname, str) == 0)
@@ -371,6 +373,8 @@ Option* find_option_lname(OptionList* opts, char const* str) {
 
 Option* find_option_sname(OptionList* opts, char const* str) {
   OPTLIST_FOREACH(opts, opt) {
+    if (opt->type == OPTION_POSITIONAL)
+      return NULL;
     if (!opt->sname)
       continue;
     if (strcmp(opt->sname, str) == 0)

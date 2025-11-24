@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#if !defined(OPT_COLUMN_WIDTH)
+#define OPT_COLUMN_WIDTH 30
+#endif
+
 #define OPTLIST_INIT(LL, OPT)                                                                                          \
   do {                                                                                                                 \
     LL.start = &(OPT);                                                                                                 \

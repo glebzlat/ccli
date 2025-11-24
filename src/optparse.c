@@ -10,26 +10,26 @@
  * and non-positionals to non-positionals, and then places positionals at the
  * end of the list.
  */
-static int collect_positionals(OptionList* pos, OptionList* opts);
+static int collect_positionals(OptionList* pos, OptionList const* opts);
 
 /* Find an option by its long name */
-static Option* find_option_lname(OptionList* opts, char const* str);
+static Option* find_option_lname(OptionList const* opts, char const* str);
 
 /* Find an option by its short name */
-static Option* find_option_sname(OptionList* opts, char const* str);
+static Option* find_option_sname(OptionList const* opts, char const* str);
 
 /* Assign a value to an option */
 static int execute_option(Option* opt, int idx, int argc, char** argv, OptParserError* err);
 
 /* Check if an option requires an argument */
-static bool opt_has_argument(Option* opt);
+static bool opt_has_argument(Option const* opt);
 
 /* Parse short options group */
 static int parse_short_opts(OptionList* opts, int idx, int argc, char** argv, int* omit_idx, OptParserError* err);
 
-static int print_option(Option* opt, FILE* fout);
-static int print_option_bare(Option* opt, FILE* fout);
-static int print_option_names(Option* opt, FILE* fout);
+static int print_option(Option const* opt, FILE* fout);
+static int print_option_bare(Option const* opt, FILE* fout);
+static int print_option_names(Option const* opt, FILE* fout);
 
 int parse_opts(OptionList* opts, int argc, char** argv, OptParserError* err) {
   assert(opts);
@@ -75,8 +75,10 @@ int parse_opts(OptionList* opts, int argc, char** argv, OptParserError* err) {
 
   if (pos_count < n_pos) {
     Option* pos = positionals.start;
-    while (pos_count != n_pos && pos->_next != NULL)
+    while (pos_count != n_pos && pos->_next != NULL) {
+      pos_count += 1;
       pos = pos->_next;
+    }
     *err = (OptParserError){OPTERROR_EXPECTED_POSITIONAL, .opt = pos->lname};
     return -1;
   }
@@ -128,8 +130,6 @@ void print_usage(OptionList* opts, FILE* fout, char const* progname) {
 void print_help(OptionList* opts, FILE* fout) {
   assert(opts);
   assert(fout);
-
-#define OPT_COLUMN_WIDTH 30
 
   /* collect_positionals is called in parse_opts and that should be enough,
    * but this is for the case if the user calls print_help without parsing
@@ -199,7 +199,7 @@ void print_error(OptParserError* err, FILE* fout) {
   fprintf(fout, "\n");
 }
 
-static int collect_positionals(OptionList* pos, OptionList* opts) {
+static int collect_positionals(OptionList* pos, OptionList const* opts) {
   pos->start = pos->end = NULL;
   Option* last_n = NULL;
   int count = 0;
@@ -227,7 +227,7 @@ static int collect_positionals(OptionList* pos, OptionList* opts) {
   return count;
 }
 
-static Option* find_option_lname(OptionList* opts, char const* str) {
+static Option* find_option_lname(OptionList const* opts, char const* str) {
   OPTLIST_FOREACH(opts, opt) {
     if (opt->type == OPTION_POSITIONAL)
       return NULL;
@@ -239,7 +239,7 @@ static Option* find_option_lname(OptionList* opts, char const* str) {
   return NULL;
 }
 
-static Option* find_option_sname(OptionList* opts, char const* str) {
+static Option* find_option_sname(OptionList const* opts, char const* str) {
   OPTLIST_FOREACH(opts, opt) {
     if (opt->type == OPTION_POSITIONAL)
       return NULL;
@@ -274,7 +274,7 @@ static int execute_option(Option* opt, int idx, int argc, char** argv, OptParser
   return 0;
 }
 
-static bool opt_has_argument(Option* opt) {
+static bool opt_has_argument(Option const* opt) {
   switch (opt->type) {
   case OPTION_STR:
     return true;
@@ -286,7 +286,7 @@ static bool opt_has_argument(Option* opt) {
   }
 }
 
-static int print_option_names(Option* opt, FILE* fout) {
+static int print_option_names(Option const* opt, FILE* fout) {
   assert(opt->sname || opt->lname);
   if (!opt->sname)
     return fprintf(fout, "--%s", opt->lname);
@@ -296,7 +296,7 @@ static int print_option_names(Option* opt, FILE* fout) {
     return fprintf(fout, "-%c|--%s", opt->sname, opt->lname);
 }
 
-static int print_option_bare(Option* opt, FILE* fout) {
+static int print_option_bare(Option const* opt, FILE* fout) {
   int total_len = 0;
 
   switch (opt->type) {
@@ -350,7 +350,7 @@ static int parse_short_opts(OptionList* opts, int idx, int argc, char** argv, in
   return 0;
 }
 
-static int print_option(Option* opt, FILE* fout) {
+static int print_option(Option const* opt, FILE* fout) {
   int total_len = 0;
 
   if (!opt->required && opt->type != OPTION_POSITIONAL)

@@ -2,10 +2,14 @@
 
 Everything is placed in a single `main.c` file, there is a usage example.
 
-Main ideas of this implementation are:
+## Features
 
-- Options themselves form a linked list;
-- Options store pointers to output variables;
-- Parser does not require memory allocation.
+- Library does not require memory allocation at all. Options form a linked list,
+  output variables are modified via pointers.
+- Option long and short names.
+- Short option grouping. Short options `-a -b -c` can be grouped into `-abc`.
+- Positional arguments.
+
+## License
 
 Licensed under [MIT license](./LICENSE).

@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "optparse.h"
@@ -168,6 +169,8 @@ char const* opterror_type_to_str(OptParserErrorType err_type) {
     return "option required";
   case OPTERROR_ONE_ARG_OPT_PER_GROUP:
     return "one argument option allowed per short option group";
+  case OPTERROR_INT_TYPE_ERROR:
+    return "required argument of type int";
   default:
     __builtin_unreachable();
   }
@@ -254,13 +257,29 @@ static Option* find_option_sname(OptionList const* opts, char const* str) {
 static int execute_option(Option* opt, int idx, int argc, char** argv, OptParserError* err) {
   assert(opt->type != OPTION_POSITIONAL);
   switch (opt->type) {
-  case OPTION_STR:
+  case OPTION_STORE_STR:
     if (idx + 1 == argc) {
       *err = (OptParserError){OPTERROR_ARGUMENT_REQUIRED, .opt = argv[idx]};
       return -1;
     }
     *(char const**)opt->dest = argv[idx + 1];
     break;
+  case OPTION_STORE_INT: {
+    if (idx + 1 == argc) {
+      *err = (OptParserError){OPTERROR_ARGUMENT_REQUIRED, .opt = argv[idx]};
+      return -1;
+    }
+
+    char* end = NULL;
+    long result = strtol(argv[idx + 1], &end, 10);
+    if (*end != '\0') {
+      *err = (OptParserError){OPTERROR_INT_TYPE_ERROR, .opt = argv[idx]};
+      return -1;
+    }
+
+    *(long*)opt->dest = result;
+    break;
+  }
   case OPTION_FLAG:
     *(bool*)opt->dest = true;
     break;
@@ -276,7 +295,8 @@ static int execute_option(Option* opt, int idx, int argc, char** argv, OptParser
 
 static bool opt_has_argument(Option const* opt) {
   switch (opt->type) {
-  case OPTION_STR:
+  case OPTION_STORE_STR:
+  case OPTION_STORE_INT:
     return true;
   case OPTION_POSITIONAL:
   case OPTION_FLAG:
@@ -313,7 +333,10 @@ static int print_option_bare(Option const* opt, FILE* fout) {
     total_len += print_option_names(opt, fout);
     break;
 
-  case OPTION_STR:
+  case OPTION_STORE_STR:
+    /* fallthrough */
+
+  case OPTION_STORE_INT:
     total_len += print_option_names(opt, fout);
     if (opt->metavar)
       total_len += fprintf(fout, " %s", opt->metavar);

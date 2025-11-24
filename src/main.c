@@ -11,6 +11,7 @@ int main(int argc, char** argv) {
   bool help = false;
   int verbose = 0;
   char const* str = NULL;
+  long long_val = 0;
   char const* path = NULL;
 
   Option foo_opt = {
@@ -44,10 +45,18 @@ int main(int argc, char** argv) {
       .lname = "str",
       .sname = 's',
       .metavar = "STR",
-      .type = OPTION_STR,
+      .type = OPTION_STORE_STR,
       .required = true,
       .dest = &str,
       .help = "string option",
+  };
+  Option int_opt = {
+      .lname = "int",
+      .sname = 'i',
+      .type = OPTION_STORE_INT,
+      .required = true,
+      .dest = &long_val,
+      .help = "int option",
   };
   Option verbose_opt = {
       .lname = "verbose",
@@ -64,6 +73,7 @@ int main(int argc, char** argv) {
   OPTLIST_ADD(opts, path_opt);
   OPTLIST_ADD(opts, str_opt);
   OPTLIST_ADD(opts, verbose_opt);
+  OPTLIST_ADD(opts, int_opt);
 
   OptParserError err = {0};
   if (parse_opts(&opts, argc, argv, &err) == -1 && !help) {
@@ -78,7 +88,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  printf("foo=%i bar=%i verbose=%i path=%s str=%s\n", foo, bar, verbose, path, str);
+  printf("foo=%i bar=%i verbose=%i path=%s str=%s int=%li\n", foo, bar, verbose, path, str, long_val);
 
   return 0;
 }

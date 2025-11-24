@@ -6,6 +6,7 @@ project(c_cli LANGUAGES C)
 
 set(SOURCES
     src/main.c
+    src/optparse.c
 )
 
 set(INCLUDE_DIRECTORIES

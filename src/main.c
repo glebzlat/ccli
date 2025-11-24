@@ -424,8 +424,8 @@ int print_option_bare(Option* opt, FILE* fout) {
   switch (opt->type) {
 
   case OPTION_POSITIONAL:
-    assert(opt->lname);
-    total_len += fprintf(fout, "%s", opt->lname);
+    assert(opt->lname || opt->metavar);
+    total_len += fprintf(fout, "%s", opt->metavar ? opt->metavar : opt->lname);
     break;
 
   case OPTION_FLAG:

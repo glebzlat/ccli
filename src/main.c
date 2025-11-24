@@ -26,7 +26,7 @@ typedef enum {
 
 typedef struct Option {
   char const* lname;
-  char const* sname;
+  char sname;
   char const* metavar;
   char const* help;
   OptionType type;
@@ -48,12 +48,13 @@ typedef enum {
   OPTERROR_EXPECTED_POSITIONAL,
   OPTERROR_ARGUMENT_REQUIRED,
   OPTERROR_REQUIRED_OPTION,
+  OPTERROR_ONE_ARG_OPT_PER_GROUP,
 } OptParserErrorType;
 
 typedef struct {
   OptParserErrorType type;
   char const* lname;
-  char const* sname;
+  char sname;
   char const* opt;
 } OptParserError;
 
@@ -73,21 +74,21 @@ int main(int argc, char** argv) {
 
   Option foo_opt = {
       .lname = "foo",
-      .sname = "f",
+      .sname = 'f',
       .type = OPTION_FLAG,
       .dest = &foo,
       .help = "foo option",
   };
   Option bar_opt = {
       .lname = "bar",
-      .sname = "b",
+      .sname = 'b',
       .type = OPTION_FLAG,
       .dest = &bar,
       .help = "bar option",
   };
   Option help_opt = {
       .lname = "help",
-      .sname = "h",
+      .sname = 'h',
       .type = OPTION_FLAG,
       .dest = &help,
       .help = "show help message",
@@ -100,7 +101,7 @@ int main(int argc, char** argv) {
   };
   Option str_opt = {
       .lname = "str",
-      .sname = "s",
+      .sname = 's',
       .metavar = "STR",
       .type = OPTION_STR,
       .required = true,
@@ -108,11 +109,11 @@ int main(int argc, char** argv) {
       .help = "string option",
   };
   Option verbose_opt = {
-    .lname = "verbose",
-    .sname = "v",
-    .type = OPTION_INCREMENT,
-    .dest = &verbose,
-    .help = "verbosity level"
+      .lname = "verbose",
+      .sname = 'v',
+      .type = OPTION_INCREMENT,
+      .dest = &verbose,
+      .help = "verbosity level",
   };
 
   OptionList opts;
@@ -120,7 +121,7 @@ int main(int argc, char** argv) {
   OPTLIST_ADD(opts, bar_opt);
   OPTLIST_ADD(opts, help_opt);
   OPTLIST_ADD(opts, path_opt);
-  OPTLIST_ADD(opts , str_opt);
+  OPTLIST_ADD(opts, str_opt);
   OPTLIST_ADD(opts, verbose_opt);
 
   OptParserError err = {0};
@@ -162,6 +163,9 @@ int execute_option(Option* opt, int idx, int argc, char** argv, OptParserError* 
 /* Check if an option requires an argument */
 bool opt_has_argument(Option* opt);
 
+/* Parse short options group */
+int parse_short_opts(OptionList* opts, int idx, int argc, char** argv, int* omit_idx, OptParserError* err);
+
 int print_option(Option* opt, FILE* fout);
 int print_option_bare(Option* opt, FILE* fout);
 int print_option_names(Option* opt, FILE* fout);
@@ -193,15 +197,8 @@ int parse_opts(OptionList* opts, int argc, char** argv, OptParserError* err) {
         omit_idx = i + 1;
 
     } else if (argv[i][0] == '-') {
-      Option* opt = find_option_sname(opts, argv[i] + 1);
-      if (!opt) {
-        *err = (OptParserError){OPTERROR_UNKNOWN, .opt = argv[i]};
+      if (parse_short_opts(opts, i, argc, argv, &omit_idx, err) == -1)
         return -1;
-      }
-      if (execute_option(opt, i, argc, argv, err) == -1)
-        return -1;
-      if (opt_has_argument(opt))
-        omit_idx = i + 1;
 
     } else {
       if (pos_count == n_pos) {
@@ -216,7 +213,9 @@ int parse_opts(OptionList* opts, int argc, char** argv, OptParserError* err) {
   }
 
   if (pos_count < n_pos) {
-    Option* pos = positionals.start->_next;
+    Option* pos = positionals.start;
+    while (pos_count != n_pos && pos->_next != NULL)
+      pos = pos->_next;
     *err = (OptParserError){OPTERROR_EXPECTED_POSITIONAL, .opt = pos->lname};
     return -1;
   }
@@ -306,6 +305,8 @@ char const* opterror_type_to_str(OptParserErrorType err_type) {
     return "option requires an argument";
   case OPTERROR_REQUIRED_OPTION:
     return "option required";
+  case OPTERROR_ONE_ARG_OPT_PER_GROUP:
+    return "one argument option allowed per short option group";
   default:
     __builtin_unreachable();
   }
@@ -318,12 +319,15 @@ void print_error(OptParserError* err, FILE* fout) {
   fprintf(fout, "%s: ", opterror_type_to_str(err->type));
 
   if (err->opt) {
-    fprintf(fout, "%s\n", err->opt);
-    return;
+    fprintf(fout, "%s ", err->opt);
+    if (!err->sname && !err->lname) {
+      fprintf(fout, "\n");
+      return;
+    }
   }
 
   if (err->sname) {
-    fprintf(fout, "-%s", err->sname);
+    fprintf(fout, "-%c", err->sname);
     if (err->lname)
       fprintf(fout, "|");
   }
@@ -354,7 +358,10 @@ int collect_positionals(OptionList* pos, OptionList* opts) {
       }
     }
   }
-  last_n->_next = pos->start;
+
+  if (last_n)
+    last_n->_next = pos->start;
+
   pos->end->_next = NULL;
   return count;
 }
@@ -377,7 +384,7 @@ Option* find_option_sname(OptionList* opts, char const* str) {
       return NULL;
     if (!opt->sname)
       continue;
-    if (strcmp(opt->sname, str) == 0)
+    if (str[0] == opt->sname)
       return opt;
   }
   return NULL;
@@ -406,16 +413,26 @@ int execute_option(Option* opt, int idx, int argc, char** argv, OptParserError* 
   return 0;
 }
 
-bool opt_has_argument(Option* opt) { return opt->type == OPTION_STR; }
+bool opt_has_argument(Option* opt) {
+  switch (opt->type) {
+  case OPTION_STR:
+    return true;
+  case OPTION_POSITIONAL:
+  case OPTION_FLAG:
+  case OPTION_INCREMENT:
+  default:
+    return false;
+  }
+}
 
 int print_option_names(Option* opt, FILE* fout) {
   assert(opt->sname || opt->lname);
   if (!opt->sname)
     return fprintf(fout, "--%s", opt->lname);
   else if (!opt->lname)
-    return fprintf(fout, "-%s", opt->sname);
+    return fprintf(fout, "-%c", opt->sname);
   else
-    return fprintf(fout, "-%s|--%s", opt->sname, opt->lname);
+    return fprintf(fout, "-%c|--%s", opt->sname, opt->lname);
 }
 
 int print_option_bare(Option* opt, FILE* fout) {
@@ -439,12 +456,37 @@ int print_option_bare(Option* opt, FILE* fout) {
     total_len += print_option_names(opt, fout);
     if (opt->metavar)
       total_len += fprintf(fout, " %s", opt->metavar);
+    else if (opt->lname)
+      total_len += fprintf(fout, " %s", opt->lname);
     else
-      total_len += fprintf(fout, " %s", opt->lname ? opt->lname : opt->sname);
+      total_len += fprintf(fout, " %c", opt->sname);
     break;
   }
 
   return total_len;
+}
+
+int parse_short_opts(OptionList* opts, int idx, int argc, char** argv, int* omit_idx, OptParserError* err) {
+  char const* str = argv[idx];
+  size_t const len = strlen(str);
+
+  for (size_t i = 1; i < len; ++i) {
+    Option* opt = find_option_sname(opts, argv[idx] + i);
+    if (!opt) {
+      *err = (OptParserError){OPTERROR_UNKNOWN, .opt = argv[idx]};
+      return -1;
+    }
+    if (execute_option(opt, idx, argc, argv, err) == -1)
+      return -1;
+    if (opt_has_argument(opt)) {
+      if (*omit_idx != -1) {
+        *err = (OptParserError){OPTERROR_ONE_ARG_OPT_PER_GROUP, .opt = argv[idx], .sname = argv[idx][i]};
+      }
+      *omit_idx = idx + 1;
+    }
+  }
+
+  return 0;
 }
 
 int print_option(Option* opt, FILE* fout) {
